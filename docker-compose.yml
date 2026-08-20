@@ -41,4 +41,4 @@ services:
       - backend
 
 volumes:
-  db-data:
+  db-data: 
