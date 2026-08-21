@@ -41,7 +41,7 @@ export default async function DashboardPage() {
             </div>
             <div>
               <div className="font-semibold text-sm">Kouvénta Portal</div>
-              <div className="text-xs text-gray-500">Version 2.6 (demo test)</div>
+              <div className="text-xs text-gray-500">Version 2.7 (demo test)</div>
             </div>
           </div>
 
