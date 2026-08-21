@@ -1,0 +1,78 @@
+// 1. Global Meta-Monitoring & Live Debugging
+livedebugging {
+  enabled = true
+}
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// 2. Discover Local Docker Containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// 3. Relabel Discovered Containers (Transform __meta labels into permanent labels)
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container_name"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "app"
+  }
+}
+
+// 4. Stream Logs from Relabeled Containers to Loki
+loki.source.docker "app_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_logs.output
+  labels     = { environment = "poc", host = "windows-local-worker" }
+  forward_to = [loki.write.ec2_loki.receiver]
+}
+
+// 5. Expose Docker Container Engine Metrics (cAdvisor)
+prometheus.exporter.cadvisor "docker_stats" {
+  docker_host      = "unix:///var/run/docker.sock"
+  storage_duration = "5m"
+}
+
+// 6. Scrape cAdvisor Metrics
+prometheus.scrape "cadvisor_scraper" {
+  targets         = prometheus.exporter.cadvisor.docker_stats.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.ec2_prometheus.receiver]
+}
+
+// 7. Scrape Alloy Internal Telemetry (Self Meta-Monitoring)
+prometheus.exporter.self "alloy_internal" {}
+
+prometheus.scrape "alloy_scraper" {
+  targets         = prometheus.exporter.self.alloy_internal.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.ec2_prometheus.receiver]
+}
+
+// 8. Remote Write Destinations (EC2 Control Plane - 16.78.184.177)
+prometheus.remote_write "ec2_prometheus" {
+  endpoint {
+    url = "http://16.78.184.177:9090/api/v1/write"
+  }
+}
+
+loki.write "ec2_loki" {
+  endpoint {
+    url = "http://16.78.184.177:3100/loki/api/v1/push"
+  }
+}
